@@ -24,9 +24,13 @@
   <data name="Label_Location" xml:space="preserve"><value>Location</value></data>
   <data name="RevealInFinder" xml:space="preserve"><value>Show in Finder</value></data>
   <data name="RevealInExplorer" xml:space="preserve"><value>Show in Explorer</value></data>
+  <data name="Action_ChangeFolder" xml:space="preserve"><value>Change…</value></data>
+  <data name="ChangeFolder_Tip" xml:space="preserve"><value>The game runs from this folder. Settings and charts it saves here are kept across updates.</value></data>
+  <data name="ChooseFolder_Title" xml:space="preserve"><value>Choose a folder for {0}</value></data>
   <data name="NotInstalled" xml:space="preserve"><value>Not installed</value></data>
   <data name="Sidebar_Downloading" xml:space="preserve"><value>Downloading · {0}%</value></data>
   <data name="Sidebar_Installing" xml:space="preserve"><value>Installing…</value></data>
+  <data name="Sidebar_Moving" xml:space="preserve"><value>Moving…</value></data>
   <data name="Sidebar_Running" xml:space="preserve"><value>Running</value></data>
   <data name="Action_Play" xml:space="preserve"><value>Play</value></data>
   <data name="Action_Install" xml:space="preserve"><value>Install</value></data>
@@ -58,6 +62,8 @@
   <data name="Status_LaunchError" xml:space="preserve"><value>Couldn’t start: {0}</value></data>
   <data name="Status_RollingBack" xml:space="preserve"><value>Restoring the previous version…</value></data>
   <data name="Status_RolledBack" xml:space="preserve"><value>Restored {0}</value></data>
+  <data name="Status_Moving" xml:space="preserve"><value>Moving the game folder…</value></data>
+  <data name="Status_FolderChanged" xml:space="preserve"><value>Game folder: {0}</value></data>
   <data name="Status_TimedOut" xml:space="preserve"><value>Connection timed out. Try again later.</value></data>
   <data name="Status_Paused" xml:space="preserve"><value>Paused. Click again to resume.</value></data>
   <data name="Status_Cancelled" xml:space="preserve"><value>Cancelled</value></data>
@@ -79,5 +85,7 @@
   <data name="Error_InvalidPackage" xml:space="preserve"><value>The package is invalid</value></data>
   <data name="Error_GameRunning" xml:space="preserve"><value>Quit the game before updating</value></data>
   <data name="Error_NoRollbackTarget" xml:space="preserve"><value>There’s no previous version to restore</value></data>
+  <data name="Error_DestinationNotEmpty" xml:space="preserve"><value>That folder isn’t empty. Pick an empty one</value></data>
+  <data name="Error_InvalidDestination" xml:space="preserve"><value>That folder can’t be used for this game</value></data>
   <data name="Error_UpdateFailed" xml:space="preserve"><value>Update failed</value></data>
 </root>

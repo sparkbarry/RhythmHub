@@ -114,6 +114,19 @@ public sealed class LauncherSettings
             Save(_data with { Channels = new Dictionary<string, string>(_data.Channels) { [gameId] = channel } });
     }
 
+    /// <summary>The folder picked for <paramref name="gameId"/>, or null for the default one under the install root.</summary>
+    public string? GetGameDirectory(string gameId)
+    {
+        lock (_lock)
+            return _data.GameDirectories.GetValueOrDefault(gameId);
+    }
+
+    public void SetGameDirectory(string gameId, string directory)
+    {
+        lock (_lock)
+            Save(_data with { GameDirectories = new Dictionary<string, string>(_data.GameDirectories) { [gameId] = directory } });
+    }
+
     /// <summary>The picked UI language ("zh", "en", "ja"), or null to follow the system.</summary>
     public string? Language
     {
@@ -142,6 +155,7 @@ public sealed class LauncherSettings
     private sealed record Data
     {
         public Dictionary<string, string> Channels { get; init; } = [];
+        public Dictionary<string, string> GameDirectories { get; init; } = [];
         public string? Language { get; init; }
     }
 }

@@ -102,4 +102,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenLogs() => _context.Platform.RevealDirectory(_context.Loggers.LogDirectory);
+
+    /// <summary>Shows the system folder picker starting near the given folder; set by the window, which owns the dialog.</summary>
+    public Func<GameViewModel, Task<string?>>? PickFolder { get; set; }
+
+    [RelayCommand]
+    private async Task ChangeGameFolderAsync(GameViewModel game)
+    {
+        if (PickFolder is null || !game.CanChangeFolder) return;
+        if (await PickFolder(game) is not { } picked) return;
+        await game.ChangeFolderAsync(picked, [.. Games.Where(g => g != game).Select(g => g.GameDirectory)]);
+    }
 }

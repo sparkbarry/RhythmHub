@@ -22,6 +22,7 @@ public enum GameState
     Downloading,
     Verifying,
     Installing,
+    Moving,
     Running,
     Failed,
 }
@@ -33,11 +34,14 @@ public sealed partial class GameViewModel : ObservableObject
 
     private readonly LauncherContext _context;
     private readonly GameEntry _entry;
-    private readonly GameUpdateService _updater;
+    private GameUpdateService _updater;
     private readonly ILogger _logger;
     private CancellationTokenSource? _operation;
     private bool _userCancelled;
     private GameRelease? _available;
+
+    /// <summary>Recovery can be refused while the game runs; it is then retried before the next check.</summary>
+    private bool _recovered;
 
     public GameViewModel(GameEntry entry, LauncherContext context)
     {
@@ -47,10 +51,9 @@ public sealed partial class GameViewModel : ObservableObject
         DisplayName = entry.DisplayName;
         Accent = Brush.Parse(entry.Color ?? "#0071E3");
         Icon = LoadIcon(entry.Icon);
-        _updater = new GameUpdateService(entry.Id, context.Options, context.Http, context.Platform, context.Loggers);
         _logger = context.Loggers.CreateLogger($"Game.{entry.Id}");
         selectedChannel = ChannelOption.Find(context.Settings.GetChannel(entry.Id, context.Options.Channel));
-        _updater.Channel = selectedChannel.Id;
+        _updater = CreateUpdater(context.Settings.GetGameDirectory(entry.Id));
         Localizer.Instance.LanguageChanged += (_, _) => OnLanguageChanged();
     }
 
@@ -75,13 +78,16 @@ public sealed partial class GameViewModel : ObservableObject
     public Bitmap? Icon { get; }
     public bool HasIcon => Icon is not null;
 
+    /// <summary>The folder the game runs from; its saved settings and charts stay there across versions.</summary>
+    public string GameDirectory => _updater.Layout.GameDirectory;
+
     /// <summary>Where the game lives, with the home directory shortened to ~.</summary>
     public string GameFolderText
     {
         get
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var root = _updater.Layout.GameRoot;
+            var root = GameDirectory;
             return OperatingSystem.IsWindows() || !root.StartsWith(home, StringComparison.Ordinal) ? root : "~" + root[home.Length..];
         }
     }
@@ -90,7 +96,7 @@ public sealed partial class GameViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBusy), nameof(PrimaryText), nameof(ShowProgress), nameof(ShowStatus), nameof(CanChangeChannel),
-        nameof(IsFailed), nameof(SidebarText), nameof(ShowCheckButton))]
+        nameof(CanChangeFolder), nameof(IsFailed), nameof(SidebarText), nameof(ShowCheckButton))]
     [NotifyCanExecuteChangedFor(nameof(PrimaryCommand), nameof(CheckCommand), nameof(CancelCommand), nameof(RollbackCommand))]
     private GameState state;
 
@@ -101,6 +107,9 @@ public sealed partial class GameViewModel : ObservableObject
 
     /// <summary>Switching mid-download would orphan the transfer, and mid-game the install would be refused.</summary>
     public bool CanChangeChannel => !IsBusy && State != GameState.Running;
+
+    /// <summary>The game's files can't be moved while it runs or while they are being written.</summary>
+    public bool CanChangeFolder => !IsBusy && State != GameState.Running;
 
     /// <summary>Builds the status line; kept instead of the text so it can be rebuilt in a new language.</summary>
     private Func<string> _status = () => "";
@@ -132,8 +141,9 @@ public sealed partial class GameViewModel : ObservableObject
     [ObservableProperty]
     private string? previousVersion;
 
-    public bool IsBusy => State is GameState.Checking or GameState.Downloading or GameState.Verifying or GameState.Installing;
-    public bool ShowProgress => State is GameState.Downloading or GameState.Verifying or GameState.Installing;
+    public bool IsBusy => State is GameState.Checking or GameState.Downloading or GameState.Verifying or GameState.Installing
+        or GameState.Moving;
+    public bool ShowProgress => State is GameState.Downloading or GameState.Verifying or GameState.Installing or GameState.Moving;
     public bool ShowStatus => !ShowProgress;
 
     /// <summary>The separate check button, hidden while the primary button already checks.</summary>
@@ -147,6 +157,7 @@ public sealed partial class GameViewModel : ObservableObject
     {
         GameState.Downloading or GameState.Verifying => string.Format(Strings.Sidebar_Downloading, ProgressValue.ToString("0")),
         GameState.Installing => Strings.Sidebar_Installing,
+        GameState.Moving => Strings.Sidebar_Moving,
         GameState.Running => Strings.Sidebar_Running,
         _ => InstalledVersionShort,
     };
@@ -157,6 +168,7 @@ public sealed partial class GameViewModel : ObservableObject
         GameState.UpdateAvailable => Strings.Action_Update,
         GameState.Checking => Strings.Action_Checking,
         GameState.Downloading or GameState.Verifying or GameState.Installing => Strings.Action_Updating,
+        GameState.Moving => Strings.Sidebar_Moving,
         GameState.Running => Strings.Action_Running,
         GameState.Failed when _available is not null => Strings.Action_Retry,
         _ when Installed is not null => Strings.Action_Play,
@@ -186,7 +198,7 @@ public sealed partial class GameViewModel : ObservableObject
     {
         try
         {
-            await _updater.RecoverAsync(CancellationToken.None);
+            await EnsureRecoveredAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -194,6 +206,54 @@ public sealed partial class GameViewModel : ObservableObject
         }
         await RefreshInstalledAsync();
         await CheckAsync();
+    }
+
+    private GameUpdateService CreateUpdater(string? directory) =>
+        new(Id, _context.Options, _context.Http, _context.Platform, _context.Loggers, gameDirectory: directory)
+        {
+            Channel = SelectedChannel.Id,
+        };
+
+    private async Task EnsureRecoveredAsync(CancellationToken ct)
+    {
+        if (_recovered) return;
+        await _updater.RecoverAsync(ct);
+        _recovered = true;
+    }
+
+    /// <summary>
+    /// Makes <paramref name="picked"/> (or a subfolder named after the game, see <see cref="GameFolder.Resolve"/>) the game's
+    /// folder. A folder holding this game's files already is taken over as is; otherwise the current folder moves there
+    /// with everything in it, saved settings and charts included.
+    /// </summary>
+    public async Task ChangeFolderAsync(string picked, IReadOnlyCollection<string> otherGameFolders)
+    {
+        if (!CanChangeFolder) return;
+        var current = GameDirectory;
+        var target = GameFolder.Resolve(picked, Id);
+        if (GameFolder.SamePath(target, current)) return;
+
+        await RunAsync(GameState.Moving, () => Strings.Status_Moving, null, async _ =>
+        {
+            IsProgressIndeterminate = true;
+            GameFolder.Validate(target, current, otherGameFolders);
+            // Not cancellable: a half-moved folder is worse than waiting.
+            if (GameFolder.OwnerOf(target) != Id && GameFolder.HasLauncherData(current))
+                await _updater.MoveToAsync(target, CancellationToken.None);
+
+            _context.Settings.SetGameDirectory(Id, target);
+            _logger.LogInformation("Game folder {Old} -> {New}", current, target);
+            _updater = CreateUpdater(target);
+            _recovered = false;
+            OnPropertyChanged(nameof(GameDirectory));
+            OnPropertyChanged(nameof(GameFolderText));
+
+            await EnsureRecoveredAsync(CancellationToken.None);
+            await RefreshInstalledAsync();
+            var folder = GameFolderText;
+            SetState(_available is not null ? GameState.UpdateAvailable : Installed is null ? GameState.Idle : GameState.Ready,
+                () => string.Format(Strings.Status_FolderChanged, folder));
+        });
     }
 
     [RelayCommand(CanExecute = nameof(CanPrimary))]
@@ -214,6 +274,11 @@ public sealed partial class GameViewModel : ObservableObject
     {
         await RunAsync(GameState.Checking, () => Strings.Status_Checking, CheckTimeout, async ct =>
         {
+            if (!_recovered)
+            {
+                await EnsureRecoveredAsync(ct);
+                await RefreshInstalledAsync();
+            }
             var available = _available = await _updater.CheckAsync(ct);
             var installed = Installed?.Version;
             RemoteVersion = available?.Version ?? installed;
@@ -277,18 +342,19 @@ public sealed partial class GameViewModel : ObservableObject
         if (Installed is not { } game) return;
         try
         {
-            if (await _context.Platform.IsGameRunningAsync(game.VersionDirectory, game.Entrypoint, CancellationToken.None))
+            if (await _context.Platform.IsGameRunningAsync(game.GameDirectory, game.Entrypoint, CancellationToken.None))
             {
                 SetStatus(() => string.Format(Strings.Status_AlreadyRunning, DisplayName));
                 return;
             }
+            await _updater.EnsureDeployedAsync(CancellationToken.None);
             var ticket = _updater.Health.Prepare(game);
-            _logger.LogInformation("Launching {Version} from {Dir}", game.Version, game.VersionDirectory);
-            await _context.Platform.LaunchGameAsync(game.VersionDirectory, game.Entrypoint, ticket.Environment, CancellationToken.None);
+            _logger.LogInformation("Launching {Version} from {Dir}", game.Version, game.GameDirectory);
+            await _context.Platform.LaunchGameAsync(game.GameDirectory, game.Entrypoint, ticket.Environment, CancellationToken.None);
             SetState(GameState.Running, () => string.Format(Strings.Status_Launching, game.Version));
 
             var outcome = await _updater.Health.WaitAsync(ticket, _entry.HealthCheck,
-                ct => _context.Platform.IsGameRunningAsync(game.VersionDirectory, game.Entrypoint, ct),
+                ct => _context.Platform.IsGameRunningAsync(game.GameDirectory, game.Entrypoint, ct),
                 HealthTimeout, CancellationToken.None);
             await _updater.RecordLaunchAsync(game.Version, outcome, CancellationToken.None);
             await RefreshInstalledAsync();
@@ -341,7 +407,7 @@ public sealed partial class GameViewModel : ObservableObject
     partial void OnCanRollbackChanged(bool value) => RollbackCommand.NotifyCanExecuteChanged();
 
     [RelayCommand(CanExecute = nameof(HasInstall))]
-    private void OpenGameFolder() => _context.Platform.RevealDirectory(_updater.Layout.GameRoot);
+    private void OpenGameFolder() => _context.Platform.RevealDirectory(GameDirectory);
 
     private async Task RefreshInstalledAsync()
     {
@@ -432,6 +498,8 @@ public sealed partial class GameViewModel : ObservableObject
         UpdateErrorCode.UnsafeArchive or UpdateErrorCode.InvalidPackage => Strings.Error_InvalidPackage,
         UpdateErrorCode.GameRunning => Strings.Error_GameRunning,
         UpdateErrorCode.NoRollbackTarget => Strings.Error_NoRollbackTarget,
+        UpdateErrorCode.DestinationNotEmpty => Strings.Error_DestinationNotEmpty,
+        UpdateErrorCode.InvalidDestination => Strings.Error_InvalidDestination,
         _ => Strings.Error_UpdateFailed,
     }, ex.Message);
 

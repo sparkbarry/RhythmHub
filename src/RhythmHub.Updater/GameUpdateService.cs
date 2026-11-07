@@ -8,7 +8,9 @@ namespace RhythmHub.Updater;
 public interface IPackageVerifier
 {
     Task VerifyPlatformPackageAsync(string unpackedDirectory, string entrypoint, CancellationToken ct);
-    Task<bool> IsGameRunningAsync(string versionDirectory, string entrypoint, CancellationToken ct);
+
+    /// <summary>True if <paramref name="entrypoint"/>'s process runs from anywhere inside <paramref name="gameDirectory"/>.</summary>
+    Task<bool> IsGameRunningAsync(string gameDirectory, string entrypoint, CancellationToken ct);
 }
 
 public sealed class GameUpdateService : IGameUpdateService
@@ -19,20 +21,23 @@ public sealed class GameUpdateService : IGameUpdateService
     private readonly GameInstallLayout _layout;
     private readonly VersionRepository _versions;
     private readonly InstallationManager _installer;
+    private readonly GameDeployment _deployment;
     private readonly ManifestClient _manifests;
     private readonly DownloadService _downloads;
     private readonly IPackageVerifier _platform;
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <param name="gameDirectory">The folder the game lives in; null for <see cref="GameInstallLayout.DefaultGameDirectory"/>.</param>
     public GameUpdateService(string gameId, UpdaterOptions options, HttpClient http, IPackageVerifier platform,
-        ILoggerFactory loggers, DownloadService? downloads = null)
+        ILoggerFactory loggers, DownloadService? downloads = null, string? gameDirectory = null)
     {
         GameId = GameInstallLayout.SafeName(gameId);
         _options = options;
-        _layout = new GameInstallLayout(options.InstallRoot, gameId);
+        _layout = new GameInstallLayout(gameDirectory ?? GameInstallLayout.DefaultGameDirectory(options.InstallRoot, gameId), gameId);
         _versions = new VersionRepository(_layout);
-        _installer = new InstallationManager(_layout, _versions, loggers.CreateLogger<InstallationManager>());
+        _deployment = new GameDeployment(_layout, loggers.CreateLogger<GameDeployment>());
+        _installer = new InstallationManager(_layout, _versions, _deployment, loggers.CreateLogger<InstallationManager>());
         _manifests = new ManifestClient(http, loggers.CreateLogger<ManifestClient>());
         _downloads = downloads ?? new DownloadService(http, loggers.CreateLogger<DownloadService>());
         _platform = platform;
@@ -63,14 +68,23 @@ public sealed class GameUpdateService : IGameUpdateService
         AtomicFile.ReadJsonAsync<PendingOperation>(_layout.PendingStatePath, ct);
 
     /// <summary>
-    /// Brings the game directory back to a consistent state after a crash or forced quit.
-    /// Must run before any other operation, while no other launcher instance is active.
+    /// Brings the game folder back to a consistent state after a crash or forced quit, and moves a folder from the
+    /// pre-.rhythmhub layout over. Must run before any other operation, while no other launcher instance is active.
+    /// Throws <see cref="UpdateErrorCode.GameRunning"/> if that needs files the running game is using.
     /// </summary>
     public async Task RecoverAsync(CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
         {
+            if (LegacyLayout.IsPresent(_layout))
+            {
+                if (await LegacyLayout.ActiveEntrypointAsync(_layout, ct) is { } entrypoint &&
+                    await _platform.IsGameRunningAsync(_layout.GameDirectory, entrypoint, ct))
+                    throw new UpdateException(UpdateErrorCode.GameRunning, "Close the game so its folder can be reorganized.");
+                await LegacyLayout.MigrateAsync(_layout, _logger, ct);
+            }
+
             var pending = await GetPendingAsync(ct);
             var state = await _versions.LoadAsync(ct);
             if (pending is not null)
@@ -100,6 +114,7 @@ public sealed class GameUpdateService : IGameUpdateService
             // Drops half-built staging dirs and any version directory current.json does not reference.
             await _installer.PruneAsync(ct);
             CleanStrayDownloads(await GetPendingAsync(ct));
+            await EnsureDeployedCoreAsync(ct);
         }
         finally
         {
@@ -157,11 +172,58 @@ public sealed class GameUpdateService : IGameUpdateService
             var needed = release.Manifest.Files.Where(f => f.Size > 0).DistinctBy(f => f.Sha256)
                 .Where(f => !IsVerifiedObject(release.Version, f)).ToList();
 
-            EnsureDiskSpace(needed.Sum(f => f.Size));
+            EnsureDiskSpace(needed.Sum(f => f.Size) + await DeploymentGrowthAsync(release, ct));
             var toFetch = await ReuseLocalFilesAsync(release.Version, needed, progress, ct);
             await FetchAsync(release, toFetch, progress, ct);
 
             await SavePendingAsync(pending with { Stage = PendingStage.Downloaded }, ct);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Finishes laying out the active version in the game folder if that was interrupted; call before launching.
+    /// </summary>
+    public async Task EnsureDeployedAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            await EnsureDeployedCoreAsync(ct);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task EnsureDeployedCoreAsync(CancellationToken ct)
+    {
+        var state = await _versions.LoadAsync(ct);
+        if (state.ActiveVersion is not { } active || await _deployment.IsCompleteAsync(active, ct)) return;
+        var manifest = await _versions.LoadManifestAsync(active, ct)
+            ?? throw new UpdateException(UpdateErrorCode.NotInstalled, $"The cached copy of {active} is missing; reinstall it.");
+        await EnsureNotRunningAsync(ct);
+        _logger.LogInformation("Finishing the layout of {Game} {Version}", GameId, active);
+        await _deployment.DeployAsync(active, manifest, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Moves the whole game folder (game, saved settings and charts, .rhythmhub) to <paramref name="target"/>, which must
+    /// be missing or empty. This service keeps pointing at the old path; create a new one for the target.
+    /// </summary>
+    public async Task MoveToAsync(string target, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            await EnsureNotRunningAsync(ct);
+            _logger.LogInformation("Moving {Game} from {From} to {To}", GameId, _layout.GameDirectory, target);
+            if (!GameFolder.Move(_layout.GameDirectory, target, ct))
+                _logger.LogWarning("Copied {Game} to {To}, but parts of {From} could not be removed", GameId, target, _layout.GameDirectory);
         }
         finally
         {
@@ -185,10 +247,13 @@ public sealed class GameUpdateService : IGameUpdateService
             }
             catch
             {
-                // Not committed. Assembly may have consumed objects, so the next attempt re-runs the download step,
-                // which only refills what is missing.
+                // Not committed: assembly may have consumed objects, so the next attempt re-runs the download step,
+                // which only refills what is missing. Committed: only laying out the game folder failed, and
+                // EnsureDeployedAsync finishes that.
                 if ((await _versions.LoadAsync(CancellationToken.None)).ActiveVersion != release.Version)
                     await SavePendingAsync(pending with { Stage = PendingStage.Downloading }, CancellationToken.None);
+                else
+                    await ClearPendingAsync();
                 throw;
             }
             await ClearPendingAsync();
@@ -203,7 +268,7 @@ public sealed class GameUpdateService : IGameUpdateService
     {
         var installed = await GetInstalledAsync(ct)
             ?? throw new UpdateException(UpdateErrorCode.NotInstalled, $"{GameId} is not installed.");
-        await _platform.VerifyPlatformPackageAsync(installed.VersionDirectory, installed.Entrypoint, ct);
+        await _platform.VerifyPlatformPackageAsync(installed.GameDirectory, installed.Entrypoint, ct);
     }
 
     public async Task RollbackAsync(CancellationToken ct)
@@ -358,17 +423,37 @@ public sealed class GameUpdateService : IGameUpdateService
     private async Task EnsureNotRunningAsync(CancellationToken ct)
     {
         if (await GetInstalledAsync(ct) is { } installed &&
-            await _platform.IsGameRunningAsync(installed.VersionDirectory, installed.Entrypoint, ct))
+            await _platform.IsGameRunningAsync(installed.GameDirectory, installed.Entrypoint, ct))
             throw new UpdateException(UpdateErrorCode.GameRunning, "Close the game before updating.");
+    }
+
+    /// <summary>
+    /// The game folder holds a copy of the active version beside its cached one; it grows by whatever the new version
+    /// adds. (On APFS the copy is a clone and takes no space, but other volumes need it.)
+    /// </summary>
+    private async Task<long> DeploymentGrowthAsync(GameRelease release, CancellationToken ct)
+    {
+        var deployed = (await _deployment.LoadAsync(ct))?.Version;
+        var current = deployed is null ? null : await _versions.LoadManifestAsync(deployed, ct);
+        return Math.Max(0, release.InstalledSizeBytes - (current?.InstalledSizeBytes ?? 0));
     }
 
     /// <summary>Objects end up moved into the new version, so peak use is roughly the objects still to be stored.</summary>
     private void EnsureDiskSpace(long bytesToStore)
     {
         var required = bytesToStore + _options.DiskSafetyMarginBytes;
-        var root = Path.GetPathRoot(Path.GetFullPath(_layout.GameRoot));
-        if (root is null) return;
-        var free = new DriveInfo(root).AvailableFreeSpace;
+        long free;
+        try
+        {
+            // On Unix any path on the volume works and finds the right mount; Windows wants the drive root.
+            var path = _layout.GameDirectory;
+            free = new DriveInfo(OperatingSystem.IsWindows() ? Path.GetPathRoot(path)! : path).AvailableFreeSpace;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException)
+        {
+            _logger.LogWarning(ex, "Could not read free space for {Dir}", _layout.GameDirectory);
+            return;
+        }
         if (free < required)
             throw new UpdateException(UpdateErrorCode.InsufficientDiskSpace,
                 $"Need {required / 1048576} MB free, only {free / 1048576} MB available.");

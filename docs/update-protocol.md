@@ -145,21 +145,31 @@ flowchart TD
 ```text
 {installRoot}/                        # macOS: ~/Library/Application Support/RhythmHub
 ├── launcher.lock                     # 单实例锁；Windows: %LOCALAPPDATA%\RhythmHub
+├── settings.json                     # 语言、各游戏频道与游戏文件夹
 ├── logs/launcher-YYYYMMDD.log
-└── games/
-    └── {gameId}/
-        ├── versions/
-        │   └── {version}/
-        │       ├── MajdataPlay.app | MajdataPlay.exe …
-        │       └── .rhythmhub/
-        │           ├── manifest.json  # 安装时的签名清单原文，用于下次增量比对
-        │           └── release.json
-        ├── downloads/{version}/       # 内容寻址：{sha256} 已校验对象，{sha256}.partial 下载中
-        ├── staging/{uuid}/
-        ├── health/health.json         # 游戏写入的启动健康标记
-        ├── current.json
-        └── pending.json
+└── games/{gameId}/                   # 没选过位置的游戏文件夹默认在这里
+
+{游戏文件夹}/                          # 玩家选的文件夹；游戏就从这里运行
+├── MajdataPlay.app | MajdataPlay.exe …  # 当前版本，按清单布置
+├── settings.json, 谱面 …              # 游戏自己写的文件，启动器不碰，跨版本保留
+└── .rhythmhub/                       # Windows 上设为隐藏
+    ├── versions/
+    │   └── {version}/                # 当前版本和回滚目标的原样副本
+    │       ├── MajdataPlay.app | MajdataPlay.exe …
+    │       └── .rhythmhub/
+    │           ├── manifest.json     # 安装时的签名清单原文，用于下次增量比对
+    │           └── release.json
+    ├── downloads/{version}/          # 内容寻址：{sha256} 已校验对象，{sha256}.partial 下载中
+    ├── staging/{uuid}/
+    ├── health/health.json            # 游戏写入的启动健康标记
+    ├── current.json
+    ├── pending.json
+    └── deployed.json                 # 游戏文件夹里布置的是哪个版本、启动器放过哪些路径
 ```
+
+清单路径不能以 `.rhythmhub/` 开头（§4），所以游戏文件不会和它冲突。
+游戏（MajdataPlay、OurTaikoPlay）把设置、谱面、成绩写在可执行文件旁边（macOS 上在 `.app/Contents` 里），
+因此游戏文件夹固定后，这些文件在更新和回滚后都还在。
 
 ### 更新过程
 
@@ -171,7 +181,30 @@ flowchart TD
 3. **组装**：在 `staging/{uuid}` 中按清单建目录、放文件（只用一次的对象直接移动，多次使用的复制）、
    设置权限位，最后创建符号链接（保证不会有文件经由符号链接写出）。
 4. **检查**：入口存在，平台结构检查通过，写入 `.rhythmhub/`。
-5. **提交**：移动到 `versions/{version}` → 原子替换 `current.json`（提交点）→ 删除 `downloads/{version}`、清理旧版本。
+5. **提交**：移动到 `versions/{version}` → 原子替换 `current.json`（提交点）→ 布置到游戏文件夹（见下）→
+   删除 `downloads/{version}`、清理旧版本。回滚同样是先改 `current.json`，再布置回滚目标。
+
+### 布置到游戏文件夹
+
+`deployed.json` 记录 `{ version, complete, paths }`，`paths` 是启动器可能放进游戏文件夹的全部路径（文件、链接、目录）。
+
+1. 先写 `complete: false`，`paths` = 旧记录 ∪ 新清单。
+2. 删除旧记录里有、新清单里没有的路径（由深到浅；目录只在空时删除；经由链接的路径不碰）。
+3. 按新清单建目录、放文件、建符号链接。文件从 `versions/{version}` 复制（APFS 上是克隆，不占额外空间），
+   保留修改时间：大小和修改时间都与缓存相同的文件跳过。
+4. 写 `complete: true`，`paths` = 新清单。
+
+清单之外的路径一律不碰。中断后 `complete` 为 `false` 或 `version` 不是 `activeVersion`，
+下次恢复或启动游戏前会重新布置（幂等）。游戏运行时不布置，报 `GameRunning`。
+磁盘检查额外计入新版本比当前布置版本多出的大小。
+
+### 更换游戏文件夹
+
+- 选中的文件夹为空、不存在、以游戏 id 命名、已是该游戏的 RhythmHub 文件夹，或含 `{id}.exe` / `{id}.app` / `{id}_Data`
+  （单独安装的旧版）时直接使用；否则在其中建 `{id}` 子文件夹。卷根目录、当前文件夹的子目录、与其他游戏文件夹互相嵌套的都拒绝。
+- 目标已是该游戏的 RhythmHub 文件夹：直接改用它。否则若当前文件夹有 `.rhythmhub/`，把整个文件夹（游戏、存档、缓存）
+  移过去：同卷改名，跨卷复制后删除原文件夹；目标必须为空。
+- 位置保存在 `settings.json` 的 `gameDirectories`。
 
 ### 下载与续传
 
@@ -197,7 +230,7 @@ flowchart TD
 - 始终保留 `activeVersion` 与 `previousGoodVersion`，其余版本在安装后清理。
 - `previousGoodVersion` 只会是**成功启动过**的版本：安装新版时，若当前版本从未通过启动健康检查，则保留原来的
   `previousGoodVersion` 作为回滚目标（首个安装的版本例外）。回滚后被放弃的版本不再作为回滚目标。
-- 存档在 Unity `Application.persistentDataPath`，不在 `versions/` 下，启动器不碰。
+- 游戏写在游戏文件夹里的文件（不在清单中）和 Unity `Application.persistentDataPath` 下的数据，启动器都不碰。
 
 `pending.json` 记录进行中的更新，**从不作为已安装的依据**：
 
@@ -214,7 +247,13 @@ flowchart TD
 | `downloads/{version}/` 已不存在 | 删除 `pending.json` |
 | 其余 | 保留，下次继续 |
 
-之后清空 `staging/`，删除 `current.json` 未引用的版本目录，以及 `downloads/` 中 `pending.json` 未记录的内容。
+之后清空 `staging/`，删除 `current.json` 未引用的版本目录，以及 `downloads/` 中 `pending.json` 未记录的内容，
+最后补完未完成的布置。
+
+**旧布局迁移**：v1.0.3 及更早把 `versions/`、`downloads/`、`current.json` 等直接放在 `games/{gameId}/` 下，
+游戏从 `versions/{version}` 里运行。恢复时若发现这种布局（游戏未运行时），把它们移进 `.rhythmhub/`，
+并把当前版本目录中清单以外的文件（游戏保存的设置、谱面）移到游戏文件夹的相同位置，然后布置当前版本。
+`current.json` 最后移动，中断后可重跑。
 频道指向别的版本或清单变了时，旧的下载会被丢弃。
 
 ## 7. 启动健康检查
@@ -251,6 +290,6 @@ flowchart TD
 | 环境变量 | 作用 |
 |---|---|
 | `RHYTHMHUB_FEED_URL` | 覆盖 `games.json` 里的 `feedBaseUrl`，例如 `http://127.0.0.1:8787/` |
-| `RHYTHMHUB_INSTALL_ROOT` | 把所有游戏数据和日志放到别处，不影响真实安装 |
+| `RHYTHMHUB_INSTALL_ROOT` | 把设置、日志和默认游戏文件夹放到别处，不影响真实安装（自选的游戏文件夹记在该根目录的 `settings.json` 里） |
 | `RHYTHMHUB_DEV_PUBLIC_KEY` | 仅 Debug 构建：`keyId=base64公钥`，额外信任的本地测试签名公钥 |
 | `RHYTHMHUB_SIGNING_KEY` | 发布工具使用的 base64 私钥（只放在本机测试或 CI Secret 中） |

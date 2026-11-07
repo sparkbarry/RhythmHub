@@ -18,6 +18,12 @@ public enum UpdateErrorCode
     GameRunning,
     NotInstalled,
     NoRollbackTarget,
+
+    /// <summary>A game folder can only be moved into a missing or empty folder.</summary>
+    DestinationNotEmpty,
+
+    /// <summary>The picked folder is a volume root or overlaps another game's folder.</summary>
+    InvalidDestination,
 }
 
 public class UpdateException(UpdateErrorCode code, string message, Exception? inner = null)

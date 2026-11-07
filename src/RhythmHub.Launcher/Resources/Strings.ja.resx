@@ -24,9 +24,13 @@
   <data name="Label_Location" xml:space="preserve"><value>インストール先</value></data>
   <data name="RevealInFinder" xml:space="preserve"><value>Finder で表示</value></data>
   <data name="RevealInExplorer" xml:space="preserve"><value>エクスプローラーで表示</value></data>
+  <data name="Action_ChangeFolder" xml:space="preserve"><value>変更…</value></data>
+  <data name="ChangeFolder_Tip" xml:space="preserve"><value>ゲームはこのフォルダーから起動します。ここに保存された設定や譜面はアップデート後も残ります。</value></data>
+  <data name="ChooseFolder_Title" xml:space="preserve"><value>{0} のフォルダーを選択</value></data>
   <data name="NotInstalled" xml:space="preserve"><value>未インストール</value></data>
   <data name="Sidebar_Downloading" xml:space="preserve"><value>ダウンロード中 · {0}%</value></data>
   <data name="Sidebar_Installing" xml:space="preserve"><value>インストール中…</value></data>
+  <data name="Sidebar_Moving" xml:space="preserve"><value>移動中…</value></data>
   <data name="Sidebar_Running" xml:space="preserve"><value>実行中</value></data>
   <data name="Action_Play" xml:space="preserve"><value>プレイ</value></data>
   <data name="Action_Install" xml:space="preserve"><value>インストール</value></data>
@@ -58,6 +62,8 @@
   <data name="Status_LaunchError" xml:space="preserve"><value>起動できませんでした：{0}</value></data>
   <data name="Status_RollingBack" xml:space="preserve"><value>前のバージョンを復元しています…</value></data>
   <data name="Status_RolledBack" xml:space="preserve"><value>{0} に戻しました</value></data>
+  <data name="Status_Moving" xml:space="preserve"><value>ゲームフォルダーを移動しています…</value></data>
+  <data name="Status_FolderChanged" xml:space="preserve"><value>ゲームフォルダー：{0}</value></data>
   <data name="Status_TimedOut" xml:space="preserve"><value>接続がタイムアウトしました。しばらくしてから再試行してください。</value></data>
   <data name="Status_Paused" xml:space="preserve"><value>一時停止しました。もう一度クリックすると再開します。</value></data>
   <data name="Status_Cancelled" xml:space="preserve"><value>キャンセルしました</value></data>
@@ -79,5 +85,7 @@
   <data name="Error_InvalidPackage" xml:space="preserve"><value>パッケージが無効です</value></data>
   <data name="Error_GameRunning" xml:space="preserve"><value>アップデートの前にゲームを終了してください</value></data>
   <data name="Error_NoRollbackTarget" xml:space="preserve"><value>復元できる前のバージョンがありません</value></data>
+  <data name="Error_DestinationNotEmpty" xml:space="preserve"><value>このフォルダーは空ではありません。空のフォルダーを選んでください</value></data>
+  <data name="Error_InvalidDestination" xml:space="preserve"><value>このフォルダーはこのゲームに使えません</value></data>
   <data name="Error_UpdateFailed" xml:space="preserve"><value>アップデートに失敗しました</value></data>
 </root>

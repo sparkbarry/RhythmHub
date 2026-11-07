@@ -28,7 +28,7 @@ public class GameUpdateServiceTests
         var installed = await svc.GetInstalledAsync(Ct);
         Assert.NotNull(installed);
         Assert.Equal("1.0.0", installed.Version);
-        Assert.Equal("data-v1", File.ReadAllText(Path.Combine(installed.VersionDirectory, "Game.app/Contents/Resources/data.bin")));
+        Assert.Equal("data-v1", File.ReadAllText(Path.Combine(installed.GameDirectory, "Game.app/Contents/Resources/data.bin")));
         Assert.Null(await svc.CheckAsync(Ct));
         Assert.Empty(Directory.EnumerateFileSystemEntries(svc.Layout.DownloadsDirectory));
         Assert.Empty(Directory.GetDirectories(svc.Layout.StagingDirectory));
@@ -96,7 +96,7 @@ public class GameUpdateServiceTests
 
         var fetched = feed.FileRequests.Select(r => r.Uri.AbsolutePath).ToList();
         Assert.Equal(["/demo/MacOS/1.1.0/Game.app/Contents/Resources/data.bin"], fetched);
-        var dir = (await svc.GetInstalledAsync(Ct))!.VersionDirectory;
+        var dir = (await svc.GetInstalledAsync(Ct))!.GameDirectory;
         Assert.Equal(new string('m', 5000), File.ReadAllText(Path.Combine(dir, "Game.app/Contents/Resources/Audio/music.ogg")));
         Assert.False(File.Exists(Path.Combine(dir, "Game.app/Contents/Resources/music.ogg")));
     }
@@ -109,7 +109,8 @@ public class GameUpdateServiceTests
         var svc = Factory.Service(tmp.Path, feed);
         feed.Publish(G, P, "1.0.0", Factory.GameBuild("v1"));
         await InstallLatestAsync(svc);
-        var plist = Path.Combine((await svc.GetInstalledAsync(Ct))!.VersionDirectory, "Game.app/Contents/Info.plist");
+        // Reuse copies from the cached version, not the game folder the player can touch.
+        var plist = Path.Combine(svc.Layout.VersionDirectory("1.0.0"), "Game.app/Contents/Info.plist");
         File.WriteAllText(plist, "<XXXX>"); // same length, different bytes
 
         feed.Publish(G, P, "1.1.0", Factory.GameBuild("v2"));
@@ -117,7 +118,7 @@ public class GameUpdateServiceTests
         await InstallLatestAsync(svc);
 
         Assert.Contains(feed.FileRequests, r => r.Uri.AbsolutePath.EndsWith("Info.plist"));
-        var dir = (await svc.GetInstalledAsync(Ct))!.VersionDirectory;
+        var dir = (await svc.GetInstalledAsync(Ct))!.GameDirectory;
         Assert.Equal("<plist/>", File.ReadAllText(Path.Combine(dir, "Game.app/Contents/Info.plist")));
     }
 
@@ -135,7 +136,7 @@ public class GameUpdateServiceTests
         var svc = Factory.Service(tmp.Path, feed);
         await InstallLatestAsync(svc);
 
-        var dir = (await svc.GetInstalledAsync(Ct))!.VersionDirectory;
+        var dir = (await svc.GetInstalledAsync(Ct))!.GameDirectory;
         Assert.Equal("same", File.ReadAllText(Path.Combine(dir, "Game.app/Contents/Resources/a.txt")));
         Assert.Equal("same", File.ReadAllText(Path.Combine(dir, "Game.app/Contents/Resources/b.txt")));
         Assert.Equal(0, new FileInfo(Path.Combine(dir, "Game.app/Contents/Resources/empty.txt")).Length);
@@ -163,7 +164,7 @@ public class GameUpdateServiceTests
 
         var svc = Factory.Service(tmp.Path, feed);
         await InstallLatestAsync(svc);
-        var dir = (await svc.GetInstalledAsync(Ct))!.VersionDirectory;
+        var dir = (await svc.GetInstalledAsync(Ct))!.GameDirectory;
 
         Assert.True((File.GetUnixFileMode(Path.Combine(dir, "Game.app/Contents/MacOS/Game")) & UnixFileMode.UserExecute) != 0);
         Assert.Equal(0b110_100_100, (int)File.GetUnixFileMode(Path.Combine(dir, "Game.app/Contents/Info.plist")));
@@ -396,7 +397,8 @@ public class GameUpdateServiceTests
         feed.Publish(G, P, "1.0.0", Factory.GameBuild("v1"));
         await InstallLatestAsync(Factory.Service(tmp.Path, feed));
 
-        Assert.True(File.Exists(Path.Combine(tmp.Path, "games", G, "current.json")));
+        Assert.True(File.Exists(Path.Combine(tmp.Path, "games", G, ".rhythmhub", "current.json")));
+        Assert.True(File.Exists(Path.Combine(tmp.Path, "games", G, "Game.app", "Contents", "Info.plist")));
         Assert.False(Directory.Exists(Path.Combine(tmp.Path, "games", "other")));
     }
 }

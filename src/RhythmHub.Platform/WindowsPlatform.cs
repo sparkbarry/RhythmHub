@@ -17,12 +17,12 @@ public sealed class WindowsPlatform : IGamePlatform
     public string DefaultInstallRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), GamePlatform.AppFolderName);
 
-    public Task LaunchGameAsync(string versionDirectory, string entrypoint, IReadOnlyDictionary<string, string> environment,
+    public Task LaunchGameAsync(string gameDirectory, string entrypoint, IReadOnlyDictionary<string, string> environment,
         CancellationToken ct)
     {
-        var psi = new ProcessStartInfo(Path.Combine(versionDirectory, entrypoint))
+        var psi = new ProcessStartInfo(Path.Combine(gameDirectory, entrypoint))
         {
-            WorkingDirectory = versionDirectory,
+            WorkingDirectory = gameDirectory,
             UseShellExecute = false,
         };
         foreach (var (key, value) in environment) psi.Environment[key] = value;
@@ -30,18 +30,17 @@ public sealed class WindowsPlatform : IGamePlatform
         return Task.CompletedTask;
     }
 
-    public Task<bool> IsGameRunningAsync(string versionDirectory, string entrypoint, CancellationToken ct)
+    public Task<bool> IsGameRunningAsync(string gameDirectory, string entrypoint, CancellationToken ct)
     {
-        var root = Path.GetFullPath(versionDirectory);
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameDirectory)) + Path.DirectorySeparatorChar;
         foreach (var p in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(entrypoint)))
         {
             using (p)
             {
                 try
                 {
-                    // Only count processes started from this game's versions/ tree.
-                    if (p.MainModule?.FileName is { } file &&
-                        file.StartsWith(Path.GetDirectoryName(root)!, StringComparison.OrdinalIgnoreCase))
+                    // Only count processes started from inside this game's folder.
+                    if (p.MainModule?.FileName is { } file && file.StartsWith(root, StringComparison.OrdinalIgnoreCase))
                         return Task.FromResult(true);
                 }
                 catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)

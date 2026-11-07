@@ -187,17 +187,21 @@
                     </Grid>
                   </StackPanel>
 
-                  <StackPanel IsVisible="{Binding HasInstall}">
-                    <Border Classes="separator" />
-                    <Grid Classes="row" ColumnDefinitions="Auto,*,Auto">
-                      <TextBlock Text="{l:Tr Label_Location}" FontWeight="Medium" VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="1" Text="{Binding GameFolderText}" Classes="secondary"
-                                 TextTrimming="PathSegmentEllipsis" HorizontalAlignment="Right"
-                                 VerticalAlignment="Center" Margin="16,0,0,0" />
-                      <Button Grid.Column="2" Classes="link" Content="{Binding RevealFolderText}" Margin="14,0,0,0"
-                              VerticalAlignment="Center" Command="{Binding OpenGameFolderCommand}" />
-                    </Grid>
-                  </StackPanel>
+                  <Border Classes="separator" />
+                  <Grid Classes="row" ColumnDefinitions="Auto,*,Auto,Auto">
+                    <TextBlock Text="{l:Tr Label_Location}" FontWeight="Medium" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding GameFolderText}" Classes="secondary"
+                               TextTrimming="PathSegmentEllipsis" HorizontalAlignment="Right"
+                               VerticalAlignment="Center" Margin="16,0,0,0" />
+                    <Button Grid.Column="2" Classes="link" Content="{l:Tr Action_ChangeFolder}" Margin="14,0,0,0"
+                            VerticalAlignment="Center" ToolTip.Tip="{l:Tr ChangeFolder_Tip}"
+                            IsEnabled="{Binding CanChangeFolder}"
+                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ChangeGameFolderCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Grid.Column="3" Classes="link" Content="{Binding RevealFolderText}" Margin="14,0,0,0"
+                            VerticalAlignment="Center" IsVisible="{Binding HasInstall}"
+                            Command="{Binding OpenGameFolderCommand}" />
+                  </Grid>
                 </StackPanel>
               </Border>
             </StackPanel>

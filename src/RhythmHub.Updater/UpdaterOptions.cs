@@ -2,7 +2,10 @@ namespace RhythmHub.Updater;
 
 public sealed record UpdaterOptions
 {
-    /// <summary>Root for all launcher-managed data, e.g. <c>~/Library/Application Support/RhythmHub</c>.</summary>
+    /// <summary>
+    /// Root for launcher data (settings, logs) and the default home of game folders,
+    /// e.g. <c>~/Library/Application Support/RhythmHub</c>.
+    /// </summary>
     public required string InstallRoot { get; init; }
 
     /// <summary>Runtime identifier style platform id: Feed platform directory: "Windows" or "MacOS".</summary>

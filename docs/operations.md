@@ -58,6 +58,7 @@
 | 启动器 macOS 签名公证 | ⏳ 等 RhythmHub 配好 §8.3 的 Apple Secrets；未配置时 Mac 包不签名 |
 | 启动器 Windows 代码签名 | ⏳ 暂不做（安装时会有 SmartScreen 提示） |
 | 启动器内切换 stable / nightly 频道 | ✅ v1.0.1 起每个游戏可单独选「稳定版 / 每日构建」，保存在 `{安装根目录}/settings.json`；默认取 `games.json` 的 `channel` |
+| 自选游戏安装位置 | ✅ 每个游戏可选文件夹，保存在 `{安装根目录}/settings.json`；游戏直接从该文件夹运行，版本缓存在其 `.rhythmhub/`（见 update-protocol §6）。旧布局在启动时自动迁移。Windows 未实测 |
 | Windows 真机安装测试 | ⏳ 未做 |
 
 ## 1. 总览

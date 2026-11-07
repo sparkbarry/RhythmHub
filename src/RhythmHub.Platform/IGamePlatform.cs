@@ -7,11 +7,12 @@ public interface IGamePlatform : IPackageVerifier
     /// <summary>Feed directory name: "Windows" (x64) or "MacOS" (Apple Silicon; Intel Macs are not supported).</summary>
     string PlatformId { get; }
 
-    /// <summary>Per-user, writable root for games, downloads and logs. No admin rights needed.</summary>
+    /// <summary>Per-user, writable root for settings, logs and the default game folders. No admin rights needed.</summary>
     string DefaultInstallRoot { get; }
 
+    /// <param name="gameDirectory">The game folder; <paramref name="entrypoint"/> is relative to it.</param>
     /// <param name="environment">Extra variables for the game process (the health handshake uses these).</param>
-    Task LaunchGameAsync(string versionDirectory, string entrypoint, IReadOnlyDictionary<string, string> environment,
+    Task LaunchGameAsync(string gameDirectory, string entrypoint, IReadOnlyDictionary<string, string> environment,
         CancellationToken ct);
 
     /// <summary>Opens a folder in Explorer / Finder.</summary>

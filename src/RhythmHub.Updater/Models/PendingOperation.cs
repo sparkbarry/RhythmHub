@@ -13,7 +13,7 @@ public enum PendingStage
 }
 
 /// <summary>
-/// Contents of <c>games/{gameId}/pending.json</c>: what an interrupted update was doing.
+/// Contents of <c>{game}/.rhythmhub/pending.json</c>: what an interrupted update was doing.
 /// Never evidence that a version is installed; only current.json is.
 /// </summary>
 public sealed record PendingOperation

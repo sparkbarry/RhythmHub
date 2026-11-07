@@ -26,5 +26,5 @@ public enum DownloadStage
 
 public sealed record DownloadProgress(long CompletedBytes, long TotalBytes, DownloadStage Stage = DownloadStage.Downloading);
 
-/// <summary>A version that is present under <c>versions/</c> and referenced by current.json.</summary>
-public sealed record InstalledGame(string Version, string VersionDirectory, string Entrypoint);
+/// <summary>The version current.json names; it runs from <paramref name="GameDirectory"/>, the game folder itself.</summary>
+public sealed record InstalledGame(string Version, string GameDirectory, string Entrypoint);

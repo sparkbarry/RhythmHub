@@ -26,13 +26,13 @@ public sealed class VersionRepository(GameInstallLayout layout)
         }
     }
 
-    /// <summary>Returns the active version only if its directory and release info are present.</summary>
+    /// <summary>Returns the active version only if its cached copy and release info are present.</summary>
     public async Task<InstalledGame?> GetActiveAsync(CancellationToken ct)
     {
         var state = await LoadAsync(ct);
         if (state.ActiveVersion is null) return null;
         var info = await LoadReleaseInfoAsync(state.ActiveVersion, ct);
         if (info is null) return null;
-        return new InstalledGame(info.Version, layout.VersionDirectory(info.Version), info.Entrypoint);
+        return new InstalledGame(info.Version, layout.GameDirectory, info.Entrypoint);
     }
 }

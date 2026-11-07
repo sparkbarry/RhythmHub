@@ -204,7 +204,7 @@ internal sealed class FakePlatform : IPackageVerifier
     public Task VerifyPlatformPackageAsync(string unpackedDirectory, string entrypoint, CancellationToken ct) =>
         RejectPackage ? throw new UpdateException(UpdateErrorCode.InvalidPackage, "rejected by test") : Task.CompletedTask;
 
-    public Task<bool> IsGameRunningAsync(string versionDirectory, string entrypoint, CancellationToken ct) => Task.FromResult(Running);
+    public Task<bool> IsGameRunningAsync(string gameDirectory, string entrypoint, CancellationToken ct) => Task.FromResult(Running);
 }
 
 internal static class Factory
@@ -222,13 +222,14 @@ internal static class Factory
         TrustedKeys = TestKeys.Trusted,
     };
 
-    public static GameUpdateService Service(string root, FakeFeed feed, FakePlatform? platform = null, int maxAttempts = 4) =>
+    public static GameUpdateService Service(string root, FakeFeed feed, FakePlatform? platform = null, int maxAttempts = 4,
+        string? gameDirectory = null) =>
         new(Game, Options(root), new HttpClient(feed), platform ?? new FakePlatform(), NullLoggerFactory.Instance,
             new DownloadService(new HttpClient(feed), NullLogger<DownloadService>.Instance)
             {
                 MaxAttempts = maxAttempts,
                 InitialBackoff = TimeSpan.Zero,
-            });
+            }, gameDirectory);
 
     public static Build GameBuild(string label) => new Build()
         .File("Game.app/Contents/Info.plist", "<plist/>")

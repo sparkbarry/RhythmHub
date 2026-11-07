@@ -18,24 +18,28 @@ public sealed class MacOSPlatform : IGamePlatform
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         "Library", "Application Support", GamePlatform.AppFolderName);
 
-    public async Task LaunchGameAsync(string versionDirectory, string entrypoint, IReadOnlyDictionary<string, string> environment,
+    public async Task LaunchGameAsync(string gameDirectory, string entrypoint, IReadOnlyDictionary<string, string> environment,
         CancellationToken ct)
     {
         // Let LaunchServices start the bundle instead of exec'ing the binary inside it.
-        var app = Path.Combine(versionDirectory, entrypoint);
+        var app = Path.Combine(gameDirectory, entrypoint);
         string[] args = ["-n", .. environment.SelectMany(kv => new[] { "--env", $"{kv.Key}={kv.Value}" }), app];
         var (code, _, err) = await RunAsync("/usr/bin/open", args, ct);
         if (code != 0)
             throw new InvalidOperationException($"open failed ({code}): {err.Trim()}");
     }
 
-    public async Task<bool> IsGameRunningAsync(string versionDirectory, string entrypoint, CancellationToken ct)
+    public async Task<bool> IsGameRunningAsync(string gameDirectory, string entrypoint, CancellationToken ct)
     {
-        // Match any executable inside this game's versions/ tree.
-        var versionsRoot = Path.GetDirectoryName(Path.GetFullPath(versionDirectory))!;
-        var (code, _, _) = await RunAsync("/usr/bin/pgrep", ["-f", versionsRoot + "/"], ct);
+        // Any process whose executable path (argv[0]; LaunchServices passes it absolute) is inside the game folder.
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameDirectory)) + "/";
+        var (code, _, _) = await RunAsync("/usr/bin/pgrep", ["-f", "^" + EscapeRegex(root)], ct);
         return code == 0;
     }
+
+    /// <summary>pgrep takes an extended regular expression; a picked folder may contain any of these.</summary>
+    private static string EscapeRegex(string text) =>
+        string.Concat(text.Select(c => @"\.^$|?*+()[]{}".Contains(c) ? "\\" + c : c.ToString()));
 
     public Task VerifyPlatformPackageAsync(string unpackedDirectory, string entrypoint, CancellationToken ct)
     {

@@ -4,10 +4,12 @@ using RhythmHub.Updater.Models;
 namespace RhythmHub.Updater;
 
 /// <summary>
-/// Assembles <c>versions/{v}</c> from the verified objects in <c>downloads/{v}/</c> and commits it via current.json.
-/// The previously active version is never touched before the commit.
+/// Assembles <c>.rhythmhub/versions/{v}</c> from the verified objects in <c>downloads/{v}/</c>, commits it via
+/// current.json and then lays it out in the game folder. The cached copy of the previous version is never touched
+/// before the commit.
 /// </summary>
-public sealed class InstallationManager(GameInstallLayout layout, VersionRepository versions, ILogger<InstallationManager> logger)
+public sealed class InstallationManager(GameInstallLayout layout, VersionRepository versions, GameDeployment deployment,
+    ILogger<InstallationManager> logger)
 {
     /// <param name="verifyPackage">Platform check run on the staged directory before it is moved into place.</param>
     public async Task InstallAsync(GameRelease release, Func<string, string, CancellationToken, Task> verifyPackage,
@@ -58,6 +60,8 @@ public sealed class InstallationManager(GameInstallLayout layout, VersionReposit
             }, ct);
             logger.LogInformation("Activated {Game} {Version} (previous {Previous})", layout.GameId, release.Version, previous);
 
+            // Committed: from here an interruption is finished by recovery, so don't stop halfway on cancel.
+            await deployment.DeployAsync(release.Version, release.Manifest, CancellationToken.None);
             TryDeleteDirectory(layout.ObjectsDirectory(release.Version));
             await PruneAsync(ct);
         }
@@ -120,7 +124,8 @@ public sealed class InstallationManager(GameInstallLayout layout, VersionReposit
     {
         var state = await versions.LoadAsync(ct);
         if (state.PreviousGoodVersion is not { } previous || previous == state.ActiveVersion ||
-            await versions.LoadReleaseInfoAsync(previous, ct) is null)
+            await versions.LoadReleaseInfoAsync(previous, ct) is null ||
+            await versions.LoadManifestAsync(previous, ct) is not { } manifest)
             throw new UpdateException(UpdateErrorCode.NoRollbackTarget, "No previous version is available.");
 
         // The version being left is the one that misbehaved; don't offer it as a rollback target.
@@ -132,6 +137,7 @@ public sealed class InstallationManager(GameInstallLayout layout, VersionReposit
             LastLaunchSuccessful = true,
         }, ct);
         logger.LogInformation("Rolled back {Game} from {From} to {To}", layout.GameId, state.ActiveVersion, previous);
+        await deployment.DeployAsync(previous, manifest, CancellationToken.None);
     }
 
     /// <summary>Keep the active and previous good versions; drop everything else, plus stale staging leftovers.</summary>

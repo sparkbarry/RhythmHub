@@ -1,6 +1,6 @@
 namespace RhythmHub.Updater.Models;
 
-/// <summary>Contents of <c>games/{gameId}/current.json</c>. Switching this file is the install commit point.</summary>
+/// <summary>Contents of <c>{game}/.rhythmhub/current.json</c>. Switching this file is the install commit point.</summary>
 public sealed record LocalGameState
 {
     public int SchemaVersion { get; init; } = 1;
@@ -11,7 +11,7 @@ public sealed record LocalGameState
 }
 
 /// <summary>
-/// Written next to each installed version as <c>versions/{v}/.rhythmhub/release.json</c>;
+/// Written next to each installed version as <c>.rhythmhub/versions/{v}/.rhythmhub/release.json</c>;
 /// the signed manifest itself is kept beside it as <c>manifest.json</c>.
 /// </summary>
 public sealed record InstalledReleaseInfo
