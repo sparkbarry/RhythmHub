@@ -1,7 +1,7 @@
 # AGENTS.md
 
 RhythmHub: a Windows / macOS desktop launcher (C#, .NET 10, Avalonia 12) that installs, updates, verifies, launches
-and rolls back Unity rhythm games (MajdataPlay, OurTaikoPlay). The games are built in their own repositories;
+and rolls back rhythm games (MajdataPlay, OurTaikoPlay; both Unity) and the OurTaikoEdit chart editor (Avalonia). The games are built in their own repositories;
 this repository holds the launcher, the release tooling and the release pipeline.
 
 The repository was formerly MajdataHub (Tauri) and was renamed from `sparkbarry/MajdataHub` to `sparkbarry/RhythmHub`

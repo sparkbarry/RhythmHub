@@ -14,7 +14,7 @@
 | 发布根地址（CDN） | `https://distrib.sparkbarry.com/` |
 | S3 桶 / 区域 | `sparkbarry-public` / `ap-northeast-1` |
 | 对象布局 | `{gameId}/{platform}/{channel}.json`（频道指针）、`{gameId}/{platform}/{version}.json`（版本清单）、`{gameId}/{platform}/{version}/…`（平铺的游戏文件） |
-| 已接入的 gameId | `MajdataPlay`、`OurTaikoPlay`；测试专用 `PipelineTest` |
+| 已接入的 gameId | `MajdataPlay`、`OurTaikoPlay`、`OurTaikoEdit`（谱面编辑器，Avalonia）；测试专用 `PipelineTest` |
 | platform 取值 | `Windows`、`MacOS` |
 | 频道 | `stable`（`v*` 标签）、`nightly`（`main`，只留最新） |
 | CI 角色 ARN | `arn:aws:iam::190779300206:role/rhythmhub-ci`（所有仓库的 Variable `AWS_ROLE_ARN`） |
@@ -60,6 +60,7 @@
 | 启动器内切换 stable / nightly 频道 | ✅ v1.0.1 起每个游戏可单独选「稳定版 / 每日构建」，保存在 `{安装根目录}/settings.json`；默认取 `games.json` 的 `channel` |
 | 自选游戏安装位置 | ✅ 每个游戏可选文件夹，保存在 `{安装根目录}/settings.json`；游戏直接从该文件夹运行，版本缓存在其 `.rhythmhub/`（见 update-protocol §6）。旧布局在启动时自动迁移。Windows 未实测 |
 | Windows 真机安装测试 | ⏳ 未做 |
+| OurTaikoEdit 自动发布 | ⏳ 2026-11-11 接入（OurTaiko/OurTaikoEdit `build.yml`、本仓库 games.json、CI 角色模板）。仓库的 `AWS_ROLE_ARN` 与 `RHYTHMHUB_SIGNING_KEY` 已设，堆栈 `rhythmhub-ci` 已按新模板更新（2026-11-11，CLI 变更集，只改 `CiRole` 的信任列表）。玩家要看到它还需发布新版启动器暂无专用图标（启动器显示首字母） |
 
 ## 1. 总览
 
@@ -123,6 +124,7 @@ CI 不保存任何长期 AWS 密钥。每次运行时，GitHub 签发一次性�
 | sparkbarry/RhythmHub | `repo:sparkbarry@118162831/RhythmHub@973319129` |
 | TeamMajdata/MajdataPlay | `repo:TeamMajdata@210497401/MajdataPlay@763747540` |
 | OurTaiko/OurTaikoPlay | `repo:OurTaiko@252237704/OurTaikoPlay@1400725485` |
+| OurTaiko/OurTaikoEdit | `repo:OurTaiko@252237704/OurTaikoEdit@1446609117` |
 
 查询某个仓库的前缀：
 
@@ -142,6 +144,8 @@ gh api repos/<owner>/<repo>/actions/oidc/customization/sub
 | sparkbarry/RhythmHub | Secret | `APPSTORE_KEY_ID`、`APPSTORE_ISSUER_ID`、`APPSTORE_PRIVATE_KEY` | App Store Connect API 密钥 | 启动器 Mac 版公证（§8.3） |
 | OurTaiko/OurTaikoPlay | Variable | `AWS_ROLE_ARN` | 同上 | 上传构建 |
 | OurTaiko/OurTaikoPlay | Secret | `RHYTHMHUB_SIGNING_KEY` | 清单签名私钥 | 自动签名上线 |
+| OurTaiko/OurTaikoEdit | Variable | `AWS_ROLE_ARN` | 同上 | 上传构建 |
+| OurTaiko/OurTaikoEdit | Secret | `RHYTHMHUB_SIGNING_KEY` | 清单签名私钥 | 自动签名上线 |
 | TeamMajdata/MajdataPlay | Variable | `AWS_ROLE_ARN` | 同上 | 上传构建（CI 尚未接入） |
 | TeamMajdata/MajdataPlay | Secret | `RHYTHMHUB_SIGNING_KEY` | 清单签名私钥 | 自动签名上线（CI 尚未接入） |
 
@@ -202,16 +206,17 @@ gh variable get AWS_ROLE_ARN --repo <owner>/<repo>
 
 目前启动器只读取 `games.json` 里的 `channel`（`stable`），还没有在界面上切换频道的功能，所以玩家暂时看不到 nightly。
 
-### 4.2 自动发布（OurTaikoPlay、MajdataPlay）
+### 4.2 自动发布（OurTaikoPlay、MajdataPlay、OurTaikoEdit）
 
 | 仓库 | 工作流 | stable | nightly | 构建机器 |
 |---|---|---|---|---|
 | OurTaiko/OurTaikoPlay | `.github/workflows/build.yml` | `v*` 标签 | `main` | 全部在 GitHub 的 Ubuntu 机器上（GameCI） |
+| OurTaiko/OurTaikoEdit | `.github/workflows/build.yml`（先跑测试 `ci.yml`） | `v*` 标签 | `main` | Windows 在 GitHub 的 Ubuntu 机器上（`dotnet publish -r win-x64` 交叉发布）；macOS 在 GitHub 的 `macos-latest`（Apple Silicon，`build/package.sh` 拼 `.app` 并 ad-hoc 签名） |
 | TeamMajdata/MajdataPlay | `.github/workflows/main.yml` | `v*` 标签（只构建 Windows、macOS，跳过 Linux、Android、iOS 和 GitHub nightly Release） | `dev` | Windows 在 GitHub 的 Ubuntu 机器上；macOS 在**自建 Mac**（`majplay-apple`，和 `majplay-android`、`majplay-ios` 在同一台机器上） |
 
-版本号：OurTaikoPlay 是 `版本-提交数`（例如 `1.0-400`）；MajdataPlay 是 `bundleVersion-提交号前7位`（例如 `2.1.0-6d68d84`）。
+版本号：OurTaikoPlay 与 OurTaikoEdit 是 `版本-提交数`（例如 `1.0-400`；OurTaikoEdit 的版本写在 `Directory.Build.props` 的 `<Version>`）；MajdataPlay 是 `bundleVersion-提交号前7位`（例如 `2.1.0-6d68d84`）。
 
-两个仓库都在 Windows / macOS 构建完成后调用
+这些仓库都在 Windows / macOS 构建完成后调用
 `sparkbarry/RhythmHub/.github/actions/upload-build@main`，依次执行：
 
 0. 从 `release-tool` Release 下载预编译的 `rhythmhub-release`（没有对应平台的版本时，才回退到从源码构建，需要 .NET SDK），并在日志里打印 runner 的剩余磁盘空间。

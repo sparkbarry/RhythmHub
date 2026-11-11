@@ -25,6 +25,17 @@
       "color": "#E5532D",
       "icon": "Games/OurTaikoPlay.png",
       "healthCheck": false
+    },
+    {
+      "id": "OurTaikoEdit",
+      "displayName": "OurTaikoEdit",
+      "description": {
+        "en": "A taiko chart editor: TJA code with a live lane preview and an editable timeline.",
+        "zh": "太鼓谱面编辑器：写 TJA 代码，实时预览轨道，在时间轴上编辑。",
+        "ja": "太鼓譜面エディター。TJA を書きながらレーンをプレビューし、タイムラインで編集できます。"
+      },
+      "color": "#3A8FC9",
+      "healthCheck": false
     }
   ]
 }

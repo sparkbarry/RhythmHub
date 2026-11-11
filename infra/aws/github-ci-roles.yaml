@@ -28,6 +28,9 @@ Parameters:
   OurTaikoPlaySubject:
     Type: String
     Default: repo:OurTaiko@252237704/OurTaikoPlay@1400725485
+  OurTaikoEditSubject:
+    Type: String
+    Default: repo:OurTaiko@252237704/OurTaikoEdit@1446609117
 
 Conditions:
   ShouldCreateOidcProvider: !Equals [!Ref CreateOidcProvider, "true"]
@@ -63,6 +66,7 @@ Resources:
                   - !Sub ${PublisherSubject}:*
                   - !Sub ${MajdataPlaySubject}:*
                   - !Sub ${OurTaikoPlaySubject}:*
+                  - !Sub ${OurTaikoEditSubject}:*
       Policies:
         - PolicyName: release-bucket-full-access
           PolicyDocument:
@@ -76,5 +80,5 @@ Resources:
 
 Outputs:
   CiRoleArn:
-    Description: Put this in the AWS_ROLE_ARN Actions variable of all three repositories.
+    Description: Put this in the AWS_ROLE_ARN Actions variable of every repository above.
     Value: !GetAtt CiRole.Arn
