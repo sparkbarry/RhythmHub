@@ -60,7 +60,7 @@
 | 启动器内切换 stable / nightly 频道 | ✅ v1.0.1 起每个游戏可单独选「稳定版 / 每日构建」，保存在 `{安装根目录}/settings.json`；默认取 `games.json` 的 `channel` |
 | 自选游戏安装位置 | ✅ 每个游戏可选文件夹，保存在 `{安装根目录}/settings.json`；游戏直接从该文件夹运行，版本缓存在其 `.rhythmhub/`（见 update-protocol §6）。旧布局在启动时自动迁移。Windows 未实测 |
 | Windows 真机安装测试 | ⏳ 未做 |
-| OurTaikoEdit 自动发布 | ⏳ 2026-11-11 接入（OurTaiko/OurTaikoEdit `build.yml`、本仓库 games.json、CI 角色模板）。仓库的 `AWS_ROLE_ARN` 与 `RHYTHMHUB_SIGNING_KEY` 已设，堆栈 `rhythmhub-ci` 已按新模板更新（2026-11-11，CLI 变更集，只改 `CiRole` 的信任列表）。玩家要看到它还需发布新版启动器暂无专用图标（启动器显示首字母） |
+| OurTaikoEdit 自动发布 | ✅ 2026-11-11 接入（OurTaiko/OurTaikoEdit `build.yml`，CI 角色已信任该仓库）。stable（`v0.1.0` 标签）与 nightly 都是 `0.1.0-23`；启动器 `v1.0.5` 起列出它。暂无专用图标（启动器显示首字母）；Mac 包的 ad-hoc 签名在逐文件分发后不完整（.dll 的签名存在扩展属性里，会丢），能正常启动，但启用 `codesign --verify` 前要先解决 |
 
 ## 1. 总览
 
