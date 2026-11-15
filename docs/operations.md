@@ -35,7 +35,7 @@
    或 `RHYTHMHUB_SIGNING_KEY="$(cat …)" rhythmhub-release publish …`（命令本身不回显）。
 2. **已发布的版本不可修改**：`{version}/` 和 `{version}.json` 一旦被频道指向过，就不能覆盖或改内容。要修复问题，请发一个新版本号。
 3. **上线顺序固定**：游戏文件 → `{version}.json` → 确认 CDN 返回相同字节 → `{channel}.json` → 再次确认。切换频道指针就是让玩家看到新版本的那一步，必须放在最后。用 `tools/ci/go-live.sh` 完成，不要手写。
-4. **缓存头**：频道指针和游戏图标 `{gameId}/icon.png` 用 `Cache-Control: no-cache`；版本清单和游戏文件用 `public, max-age=31536000, immutable`。不需要也不要做 CloudFront Invalidation。
+4. **缓存头**：频道指针用 `Cache-Control: no-cache`；游戏图标 `{gameId}/icon.png` 用 `public, max-age=86400`（换图标最多一天生效）；版本清单和游戏文件用 `public, max-age=31536000, immutable`。不需要也不要做 CloudFront Invalidation。
 5. **上传游戏目录必须带** `aws s3 sync --no-follow-symlinks`。符号链接、权限位和空目录记录在清单里，不作为 S3 对象上传。
 6. **签名只通过** `rhythmhub-release publish` 完成。不要手工编辑已签名的 JSON，改任何一个字节都会让签名失效。
 7. **OIDC 信任条件必须用带数字 ID 的 immutable subject**（见 §2.3），只写仓库名的格式会被 AWS 拒绝。
@@ -377,13 +377,13 @@ curl -sI https://distrib.sparkbarry.com/NewGame/Windows/stable.json | grep -i ca
 
 ### 5.8 游戏图标
 
-启动器每次启动都会取 `{gameId}/icon.png`（各平台共用），换图标不需要发启动器。正方形 PNG、不透明铺满（启动器自己裁圆角），
+启动器每次启动都会取 `{gameId}/icon.png`（各平台共用），换图标不需要发启动器；缓存一天，换上的图标最多一天后出现在启动器里。正方形 PNG、不透明铺满（启动器自己裁圆角），
 建议 512×512，不超过 2 MB。用维护者账号上传或替换（`aws login` 之后）：
 
 ```bash
 aws s3 cp icon.png s3://sparkbarry-public/NewGame/icon.png --region ap-northeast-1 \
-  --content-type image/png --cache-control no-cache
-curl -sI https://distrib.sparkbarry.com/NewGame/icon.png   # 200、image/png、no-cache
+  --content-type image/png --cache-control "public, max-age=86400"
+curl -sI https://distrib.sparkbarry.com/NewGame/icon.png   # 200、image/png、public, max-age=86400
 ```
 
 删掉它（`aws s3 rm`），启动器就回到内置图标或首字母。图标不属于发布文件，不走 `go-live.sh`；nightly 清理只动 `{gameId}/{platform}/`，碰不到它。

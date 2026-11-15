@@ -23,7 +23,7 @@ v2 与计划书的主要差异：
 ```text
 {feedBase}/                                   # https://distrib.sparkbarry.com/
 └── {gameId}/
-    ├── icon.png                              # 启动器里显示的图标（各平台共用，维护者手动更换）  Cache-Control: no-cache
+    ├── icon.png                              # 启动器里显示的图标（各平台共用，维护者手动更换）  max-age=86400
     └── {platform}/
         ├── stable.json                       # 频道指针（签名）  Cache-Control: no-cache
         ├── {version}.json                    # 版本清单（签名）  immutable
@@ -38,8 +38,8 @@ v2 与计划书的主要差异：
 - `stable.json` 必须设为 `no-cache`（或很短的 max-age），客户端请求时也带 `Cache-Control: no-cache`。
 - S3 本身不支持自定义域名 HTTPS，前面需要 CloudFront。CloudFront 需支持 Range 请求（默认支持）。
 - 缺失的对象在私有桶上会返回 403，客户端按“不存在”处理。
-- `icon.png` 不签名、可以随时覆盖，所以和频道指针一样用 `no-cache`：CloudFront 每次回源比对 ETag，换上的图标下次启动就能看到，
-  不需要 Invalidation。启动器把它存在 `{installRoot}/icons/{gameId}.png`（连同 `.etag`），之后带 `If-None-Match` 请求，
+- `icon.png` 不签名、可以随时覆盖，所以不能用 `immutable`；用 `public, max-age=86400`：CloudFront 最多缓存一天再回源比对 ETag，
+  换上的图标最多一天后出现，不做 Invalidation。启动器把它存在 `{installRoot}/icons/{gameId}.png`（连同 `.etag`），之后带 `If-None-Match` 请求，
   没变时只得到 304。只接受 PNG 且不超过 2 MB；返回 403/404 时删掉本地那份，回到内置图标（`games.json` 的 `icon`），
   再没有就显示首字母；网络错误时保留本地那份。
 

@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace RhythmHub.Updater;
 
 /// <summary>
-/// Each game's icon from the feed (<c>{gameId}/icon.png</c>, served <c>no-cache</c> so a replaced icon shows at once),
+/// Each game's icon from the feed (<c>{gameId}/icon.png</c>, cached by the CDN for a day, so a replaced icon shows within one),
 /// kept under <c>{installRoot}/icons/</c> so it shows offline and before the feed answers. The ETag of the copy is
 /// sent back, so an unchanged icon costs a 304.
 /// </summary>
