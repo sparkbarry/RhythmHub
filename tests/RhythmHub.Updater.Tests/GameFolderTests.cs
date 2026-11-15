@@ -50,6 +50,25 @@ public class GameFolderTests
     }
 
     [Fact]
+    public async Task An_update_moves_the_bundles_time_so_LaunchServices_reads_it_again()
+    {
+        using var tmp = new TempDir();
+        using var feed = new FakeFeed();
+        var svc = Factory.Service(tmp.Path, feed);
+        feed.Publish(G, P, "1.0.0", Factory.GameBuild("v1"));
+        await InstallLatestAsync(svc);
+        var bundle = Path.Combine(svc.Layout.GameDirectory, "Game.app");
+        var old = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        Directory.SetLastWriteTimeUtc(bundle, old);
+
+        // Only a file deep inside the bundle changes, as with a new icon in Contents/Resources.
+        feed.Publish(G, P, "1.1.0", Factory.GameBuild("v2"));
+        await InstallLatestAsync(svc);
+
+        Assert.True(Directory.GetLastWriteTimeUtc(bundle) > old);
+    }
+
+    [Fact]
     public async Task Files_the_game_saved_survive_update_and_rollback()
     {
         using var tmp = new TempDir();

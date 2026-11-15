@@ -55,6 +55,11 @@ public sealed class GameDeployment(GameInstallLayout layout, ILogger logger)
         foreach (var link in manifest.Symlinks)
             PlaceLink(ManifestPaths.Under(root, link.Path), link);
 
+        // Writing inside a bundle leaves the bundle's own time alone, and that time is what tells LaunchServices to
+        // read it again: without this, Finder and the Dock keep the icon and name of the first version installed.
+        foreach (var bundle in Bundles(manifest))
+            Directory.SetLastWriteTimeUtc(ManifestPaths.Under(root, bundle), DateTime.UtcNow);
+
         await SaveAsync(new DeploymentState { Version = version, Complete = true, Paths = Sorted(wanted) }, ct);
         logger.LogInformation("Laid out {Game} {Version} in {Dir}: {Copied} files copied, {Stale} old paths removed",
             layout.GameId, version, root, copied, stale.Count);
@@ -79,6 +84,10 @@ public sealed class GameDeployment(GameInstallLayout layout, ILogger logger)
         }
         return dirs;
     }
+
+    /// <summary>The macOS app bundles at the top of the game folder.</summary>
+    internal static IEnumerable<string> Bundles(ReleaseManifest manifest) =>
+        ManagedDirectories(manifest).Where(d => !d.Contains('/') && d.EndsWith(".app", StringComparison.OrdinalIgnoreCase));
 
     private void RemoveStale(string root, string path)
     {
