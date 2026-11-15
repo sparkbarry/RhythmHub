@@ -35,6 +35,7 @@
         "ja": "太鼓譜面エディター。TJA を書きながらレーンをプレビューし、タイムラインで編集できます。"
       },
       "color": "#3A8FC9",
+      "icon": "Games/OurTaikoEdit.png",
       "healthCheck": false
     }
   ]
