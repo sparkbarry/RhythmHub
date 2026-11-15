@@ -19,6 +19,7 @@ public sealed class LauncherContext : IDisposable
         Options = options;
         Http = http;
         Loggers = loggers;
+        Icons = new GameIconCache(options.FeedBaseUri, options.InstallRoot, http, loggers.CreateLogger("Icons"));
     }
 
     /// <summary>Redirects all game data for local testing so the real install stays untouched.</summary>
@@ -31,6 +32,9 @@ public sealed class LauncherContext : IDisposable
     public FileLoggerFactory Loggers { get; }
     public LauncherSelfUpdate SelfUpdate { get; }
     public LauncherSettings Settings { get; }
+
+    /// <summary>The games' icons from the feed, kept for offline use.</summary>
+    public GameIconCache Icons { get; }
 
     /// <summary>Null when another launcher already owns this install root.</summary>
     public InstanceLock? InstanceLock { get; }

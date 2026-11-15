@@ -89,6 +89,9 @@ internal sealed class FakeFeed : HttpMessageHandler, IDisposable
 
     public string DropPathSuffix { get; set; } = "big.bin";
 
+    /// <summary>While set, every request is answered with this status, as by a failing CDN.</summary>
+    public HttpStatusCode? FailWith { get; set; }
+
     public IEnumerable<(Uri Uri, long? RangeFrom)> FileRequests =>
         Log.Where(r => !r.Uri.AbsolutePath.EndsWith(".json", StringComparison.Ordinal));
 
@@ -149,6 +152,14 @@ internal sealed class FakeFeed : HttpMessageHandler, IDisposable
         if (!_objects.TryGetValue(request.RequestUri!.AbsoluteUri, out var body))
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)); // what S3 says for missing keys
 
+        if (FailWith is { } status)
+            return Task.FromResult(new HttpResponseMessage(status));
+
+        // S3 tags an object with its MD5; any hash of the bytes serves here.
+        var etag = new EntityTagHeaderValue($"\"{Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(body))}\"");
+        if (request.Headers.IfNoneMatch.Any(t => t.Tag == etag.Tag))
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotModified) { Headers = { ETag = etag } });
+
         var offset = range ?? 0;
         if (offset > body.Length)
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.RequestedRangeNotSatisfiable));
@@ -162,6 +173,7 @@ internal sealed class FakeFeed : HttpMessageHandler, IDisposable
         var content = new StreamContent(stream);
         content.Headers.ContentLength = body.Length - offset;
         var response = new HttpResponseMessage(range is null ? HttpStatusCode.OK : HttpStatusCode.PartialContent) { Content = content };
+        response.Headers.ETag = etag;
         if (range is not null)
             content.Headers.ContentRange = new ContentRangeHeaderValue(offset, body.Length - 1, body.Length);
         return Task.FromResult(response);

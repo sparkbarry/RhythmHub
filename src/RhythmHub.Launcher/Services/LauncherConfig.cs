@@ -4,7 +4,8 @@ namespace RhythmHub.Launcher.Services;
 
 /// <param name="HealthCheck">True once the game writes the launch health marker (docs/update-protocol.md §7).</param>
 /// <param name="Color">The game's tile color in the launcher, as a hex string; shown behind the initial when there is no icon.</param>
-/// <param name="Icon">Path of the game's icon inside the launcher's Assets, e.g. "Games/OurTaikoPlay.png".</param>
+/// <param name="Icon">Path of the game's built-in icon inside the launcher's Assets, e.g. "Games/OurTaikoPlay.png"; shown until
+/// the feed's <c>{id}/icon.png</c> has been fetched once, and whenever the feed has none.</param>
 /// <param name="Description">The description keyed by two-letter language ("en", "zh", "ja"); "en" is the fallback.</param>
 public sealed record GameEntry(
     string Id, string DisplayName, IReadOnlyDictionary<string, string>? Description = null, bool HealthCheck = false,

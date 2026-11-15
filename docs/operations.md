@@ -13,7 +13,7 @@
 |---|---|
 | 发布根地址（CDN） | `https://distrib.sparkbarry.com/` |
 | S3 桶 / 区域 | `sparkbarry-public` / `ap-northeast-1` |
-| 对象布局 | `{gameId}/{platform}/{channel}.json`（频道指针）、`{gameId}/{platform}/{version}.json`（版本清单）、`{gameId}/{platform}/{version}/…`（平铺的游戏文件） |
+| 对象布局 | `{gameId}/icon.png`（启动器里的图标，手动更换）、`{gameId}/{platform}/{channel}.json`（频道指针）、`{gameId}/{platform}/{version}.json`（版本清单）、`{gameId}/{platform}/{version}/…`（平铺的游戏文件） |
 | 已接入的 gameId | `MajdataPlay`、`OurTaikoPlay`、`OurTaikoEdit`（谱面编辑器，Avalonia）；测试专用 `PipelineTest` |
 | platform 取值 | `Windows`、`MacOS` |
 | 频道 | `stable`（`v*` 标签）、`nightly`（`main`，只留最新） |
@@ -35,11 +35,11 @@
    或 `RHYTHMHUB_SIGNING_KEY="$(cat …)" rhythmhub-release publish …`（命令本身不回显）。
 2. **已发布的版本不可修改**：`{version}/` 和 `{version}.json` 一旦被频道指向过，就不能覆盖或改内容。要修复问题，请发一个新版本号。
 3. **上线顺序固定**：游戏文件 → `{version}.json` → 确认 CDN 返回相同字节 → `{channel}.json` → 再次确认。切换频道指针就是让玩家看到新版本的那一步，必须放在最后。用 `tools/ci/go-live.sh` 完成，不要手写。
-4. **缓存头**：频道指针用 `Cache-Control: no-cache`；版本清单和游戏文件用 `public, max-age=31536000, immutable`。不需要也不要做 CloudFront Invalidation。
+4. **缓存头**：频道指针和游戏图标 `{gameId}/icon.png` 用 `Cache-Control: no-cache`；版本清单和游戏文件用 `public, max-age=31536000, immutable`。不需要也不要做 CloudFront Invalidation。
 5. **上传游戏目录必须带** `aws s3 sync --no-follow-symlinks`。符号链接、权限位和空目录记录在清单里，不作为 S3 对象上传。
 6. **签名只通过** `rhythmhub-release publish` 完成。不要手工编辑已签名的 JSON，改任何一个字节都会让签名失效。
 7. **OIDC 信任条件必须用带数字 ID 的 immutable subject**（见 §2.3），只写仓库名的格式会被 AWS 拒绝。
-8. **桶里只放游戏发布文件**，桶的全部内容都会通过 CDN 公开。
+8. **桶里只放游戏发布文件和游戏图标**，桶的全部内容都会通过 CDN 公开。
 9. **删除操作**只允许两种：`go-live.sh` 对 nightly 的自动清理，以及 Pipeline test 的 `cleanup`（只删 `PipelineTest/`）。不要手动删除其他游戏目录。
 10. 修改上传 Action、`go-live.sh`、发布工具或 AWS 配置后，必须运行 **Pipeline test** 回归（§4.4），通过后再让真实游戏使用。
 11. **自建机器磁盘有限**（MajdataPlay 的 Mac）：上传 Action 不能在 runner 上安装大的依赖。它使用预编译的发布工具，不需要 .NET SDK；准备构建目录时用 APFS 克隆（`cp -c`），不要整份复制。
@@ -60,7 +60,7 @@
 | 启动器内切换 stable / nightly 频道 | ✅ v1.0.1 起每个游戏可单独选「稳定版 / 每日构建」，保存在 `{安装根目录}/settings.json`；默认取 `games.json` 的 `channel` |
 | 自选游戏安装位置 | ✅ 每个游戏可选文件夹，保存在 `{安装根目录}/settings.json`；游戏直接从该文件夹运行，版本缓存在其 `.rhythmhub/`（见 update-protocol §6）。旧布局在启动时自动迁移。Windows 未实测 |
 | Windows 真机安装测试 | ⏳ 未做 |
-| OurTaikoEdit 自动发布 | ✅ 2026-11-11 接入（OurTaiko/OurTaikoEdit `build.yml`，CI 角色已信任该仓库）。stable（`v0.1.0` 标签）与 nightly 都是 `0.1.0-23`；启动器 `v1.0.5` 起列出它。暂无专用图标（启动器显示首字母）；Mac 包的 ad-hoc 签名在逐文件分发后不完整（.dll 的签名存在扩展属性里，会丢），能正常启动，但启用 `codesign --verify` 前要先解决 |
+| OurTaikoEdit 自动发布 | ✅ 2026-11-11 接入（OurTaiko/OurTaikoEdit `build.yml`，CI 角色已信任该仓库）。stable（`v0.1.0` 标签）与 nightly 都是 `0.1.0-23`；启动器 `v1.0.5` 起列出它。图标在 `OurTaikoEdit/icon.png`（§5.8，启动器内也内置一份）；Mac 包的 ad-hoc 签名在逐文件分发后不完整（.dll 的签名存在扩展属性里，会丢），能正常启动，但启用 `codesign --verify` 前要先解决 |
 
 ## 1. 总览
 
@@ -356,6 +356,7 @@ gh secret set RHYTHMHUB_SIGNING_KEY --repo SomeOrg/NewGame < ~/.rhythmhub/rhythm
 
 2. 在 [publish-game.yml](../.github/workflows/publish-game.yml) 的 `game` 选项里加上 `NewGame`，手动发布和回滚时才能选到它。
 3. 发布新版启动器，旧启动器的游戏列表里不会出现新游戏。
+4. 上传图标（见 §5.8）。`games.json` 的 `icon` 只是离线时的内置图标，可以不写。
 
 ### 5.6 （推荐）启动健康标记
 
@@ -373,6 +374,19 @@ curl -sI https://distrib.sparkbarry.com/NewGame/Windows/stable.json | grep -i ca
 ```
 
 应返回签名的指针 JSON，且带 `cache-control: no-cache`。然后在启动器里安装并启动一次。
+
+### 5.8 游戏图标
+
+启动器每次启动都会取 `{gameId}/icon.png`（各平台共用），换图标不需要发启动器。正方形 PNG、不透明铺满（启动器自己裁圆角），
+建议 512×512，不超过 2 MB。用维护者账号上传或替换（`aws login` 之后）：
+
+```bash
+aws s3 cp icon.png s3://sparkbarry-public/NewGame/icon.png --region ap-northeast-1 \
+  --content-type image/png --cache-control no-cache
+curl -sI https://distrib.sparkbarry.com/NewGame/icon.png   # 200、image/png、no-cache
+```
+
+删掉它（`aws s3 rm`），启动器就回到内置图标或首字母。图标不属于发布文件，不走 `go-live.sh`；nightly 清理只动 `{gameId}/{platform}/`，碰不到它。
 
 ## 6. 接入新平台
 

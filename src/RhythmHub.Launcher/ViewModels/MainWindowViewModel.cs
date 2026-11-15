@@ -71,6 +71,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         _ = PrepareLauncherUpdateAsync();
         foreach (var game in Games)
+            _ = game.RefreshIconAsync();
+        foreach (var game in Games)
             await game.InitializeAsync();
     }
 

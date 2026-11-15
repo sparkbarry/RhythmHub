@@ -50,8 +50,8 @@ public sealed partial class GameViewModel : ObservableObject
         Id = entry.Id;
         DisplayName = entry.DisplayName;
         Accent = Brush.Parse(entry.Color ?? "#0071E3");
-        Icon = LoadIcon(entry.Icon);
         _logger = context.Loggers.CreateLogger($"Game.{entry.Id}");
+        icon = LoadIcon();
         selectedChannel = ChannelOption.Find(context.Settings.GetChannel(entry.Id, context.Options.Channel));
         _updater = CreateUpdater(context.Settings.GetGameDirectory(entry.Id));
         Localizer.Instance.LanguageChanged += (_, _) => OnLanguageChanged();
@@ -74,9 +74,26 @@ public sealed partial class GameViewModel : ObservableObject
     public string Initial => DisplayName[..1];
     public IBrush Accent { get; }
 
-    /// <summary>The game's icon; null shows the initial on the accent color instead.</summary>
-    public Bitmap? Icon { get; }
+    /// <summary>The game's icon: the feed's, kept from the last fetch, else the built-in one; null shows the initial on
+    /// the accent color instead.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasIcon))]
+    private Bitmap? icon;
+
     public bool HasIcon => Icon is not null;
+
+    /// <summary>Fetches the feed's icon and shows it if it changed; never fails.</summary>
+    public async Task RefreshIconAsync()
+    {
+        try
+        {
+            if (await _context.Icons.RefreshAsync(Id, CancellationToken.None)) Icon = LoadIcon();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Icon refresh failed");
+        }
+    }
 
     /// <summary>The folder the game runs from; its saved settings and charts stay there across versions.</summary>
     public string GameDirectory => _updater.Layout.GameDirectory;
@@ -503,7 +520,23 @@ public sealed partial class GameViewModel : ObservableObject
         _ => Strings.Error_UpdateFailed,
     }, ex.Message);
 
-    private Bitmap? LoadIcon(string? path)
+    private Bitmap? LoadIcon()
+    {
+        if (_context.Icons.Cached(Id) is { } kept)
+        {
+            try
+            {
+                return new Bitmap(kept);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Kept icon {Path} could not be read", kept);
+            }
+        }
+        return LoadBundledIcon(_entry.Icon);
+    }
+
+    private Bitmap? LoadBundledIcon(string? path)
     {
         if (path is null) return null;
         try
