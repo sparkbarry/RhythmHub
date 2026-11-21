@@ -59,8 +59,8 @@ public sealed class WindowsPlatform : IGamePlatform
         var exe = Path.Combine(unpackedDirectory, entrypoint);
         if (!File.Exists(exe))
             throw new UpdateException(UpdateErrorCode.InvalidPackage, $"'{entrypoint}' not found.");
-        if (!File.Exists(Path.Combine(unpackedDirectory, "UnityPlayer.dll")))
-            throw new UpdateException(UpdateErrorCode.InvalidPackage, "UnityPlayer.dll not found; not a Unity Windows player.");
+        // Any engine, as on macOS: Unity players (MajdataPlay, OurTaikoPlay) and .NET apps (OurTaikoEdit) alike.
+        // The files themselves are vouched for by the signed manifest.
         // TODO(phase C): Authenticode check once release builds are signed.
         return Task.CompletedTask;
     }

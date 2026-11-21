@@ -60,7 +60,7 @@
 | 启动器内切换 stable / nightly 频道 | ✅ v1.0.1 起每个游戏可单独选「稳定版 / 每日构建」，保存在 `{安装根目录}/settings.json`；默认取 `games.json` 的 `channel` |
 | 自选游戏安装位置 | ✅ 每个游戏可选文件夹，保存在 `{安装根目录}/settings.json`；游戏直接从该文件夹运行，版本缓存在其 `.rhythmhub/`（见 update-protocol §6）。旧布局在启动时自动迁移。Windows 未实测 |
 | Windows 真机安装测试 | ⏳ 未做 |
-| OurTaikoEdit 自动发布 | ✅ 2026-11-11 接入（OurTaiko/OurTaikoEdit `build.yml`，CI 角色已信任该仓库）。stable（`v0.1.0` 标签）与 nightly 都是 `0.1.0-23`；启动器 `v1.0.5` 起列出它。图标在 `OurTaikoEdit/icon.png`（§5.8，启动器内也内置一份）；Mac 包的 ad-hoc 签名在逐文件分发后不完整（.dll 的签名存在扩展属性里，会丢），能正常启动，但启用 `codesign --verify` 前要先解决 |
+| OurTaikoEdit 自动发布 | ✅ 2026-11-11 接入（OurTaiko/OurTaikoEdit `build.yml`，CI 角色已信任该仓库）。stable（`v0.1.0` 标签）与 nightly 都是 `0.1.0-23`；启动器 `v1.0.5` 起列出它。图标在 `OurTaikoEdit/icon.png`（§5.8，启动器内也内置一份）；Mac 包的 ad-hoc 签名在逐文件分发后不完整（.dll 的签名存在扩展属性里，会丢），能正常启动，但启用 `codesign --verify` 前要先解决。**Windows 上一直装不上**：启动器的 Windows 包检查要求 `UnityPlayer.dll`，OurTaikoEdit 不是 Unity 程序，解包后的检查就失败；2026-11-21 去掉了这条（只查入口 `.exe` 存在，和 macOS 一样不看引擎），要等下一个启动器版本才生效 |
 
 ## 1. 总览
 
